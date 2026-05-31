@@ -90,6 +90,22 @@
     animation:cuepulse 3.2s ease-in-out infinite;
   }
   @keyframes cuepulse{0%,100%{opacity:.35}50%{opacity:.85}}
+
+  /* ---------------- mobile: full-bleed, swipe-first ---------------- */
+  @media (max-width:680px){
+    body{background:var(--panel);}
+    #stage{
+      width:100vw;height:100vh;height:100dvh;
+      border-radius:0;box-shadow:none;
+      cursor:default;
+    }
+    #hint,#brand{font-size:9px;letter-spacing:.22em;top:16px;}
+    #hint{left:16px;} #brand{right:16px;}
+    .daylabel{font-size:10px;letter-spacing:.28em;}
+    #caption .word{font-size:clamp(13px,4.2vw,18px);}
+    #counter{font-size:10px;bottom:5%;}
+    #drag-cue{bottom:11%;font-size:9px;gap:22px;}
+  }
 </style>
 </head>
 <body>
@@ -330,12 +346,16 @@ function resize(){
   gl.viewport(0,0,canvas.width,canvas.height);
 
   // portrait 1000:1500 (2:3) cards; only the parts entering the margins distort
-  cardH=Math.min(H*0.68, 1500);
+  const mobile = W <= 680;
+  cardH=Math.min(H*(mobile?0.58:0.68), 1500);
   cardW=cardH*(1000/1500);
-  // cap width so multiple cards fit horizontally on wide screens
-  if(cardW > W*0.46){ cardW = W*0.46; cardH = cardW*1.5; }
-  spacing=cardW*1.20;
-  cardY=H*0.48;
+  // cap width vs viewport — mobile shows one dominant card with a peek of neighbours
+  const maxWFrac = mobile ? 0.70 : 0.46;
+  if(cardW > W*maxWFrac){ cardW = W*maxWFrac; cardH = cardW*1.5; }
+  spacing=cardW*(mobile?1.16:1.20);
+  cardY=H*(mobile?0.46:0.48);
+  const hint=document.getElementById("hint");
+  if(hint) hint.textContent = mobile ? "SWIPE ◀ ▶" : "DRAG · SCROLL · ◀ ▶";
 }
 window.addEventListener("resize",resize);
 
@@ -361,10 +381,12 @@ function wrap(x){
 const stage=document.getElementById("stage");
 function touched(){userTouched=true;const c=document.getElementById("drag-cue");if(c)c.style.display="none";}
 
+let startScroll=0,startSlide=0;
 stage.addEventListener("pointerdown",e=>{
   dragging=true;autoSnap=false;touched();
-  stage.classList.add("dragging");stage.setPointerCapture(e.pointerId);
+  stage.classList.add("dragging");try{stage.setPointerCapture(e.pointerId);}catch(_){}
   lastX=e.clientX;lastT=performance.now();pVel=0;
+  startScroll=scroll;startSlide=Math.round(scroll/spacing);
 });
 stage.addEventListener("pointermove",e=>{
   if(!dragging)return;
@@ -378,8 +400,15 @@ stage.addEventListener("pointermove",e=>{
 function endDrag(e){
   if(!dragging)return;
   dragging=false;stage.classList.remove("dragging");
-  vel=pVel*0.5;              // gentle fling (further clamped in frame)
-  autoSnap=true;
+  autoSnap=true;vel=0;
+  // swipe = paginate exactly one card; otherwise snap to nearest
+  const dragged=scroll-startScroll;
+  if(Math.abs(pVel)>3 || Math.abs(dragged)>spacing*0.18){
+    const dir=Math.sign(pVel!==0?pVel:dragged)||1;
+    snapTo((startSlide+dir)*spacing);
+  } else {
+    snapTo(Math.round(scroll/spacing)*spacing);
+  }
 }
 stage.addEventListener("pointerup",endDrag);
 stage.addEventListener("pointercancel",endDrag);
@@ -432,7 +461,7 @@ function frame(){
     vel*=0.90;
     if(autoSnap && Math.abs(vel)<1.0){
       const tgt = snapTarget!==null?snapTarget:Math.round(scroll/spacing)*spacing;
-      scroll+=(tgt-scroll)*0.14;
+      scroll+=(tgt-scroll)*0.18;
       if(Math.abs(tgt-scroll)<0.4){scroll=tgt;snapTarget=null;}
     }
   } else { vel=pVel; }
