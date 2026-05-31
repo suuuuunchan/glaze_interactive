@@ -323,10 +323,13 @@ void main(){
   float rim   = smoothstep(0.86,1.0, abs(v_bulge)) * w * 0.5;
   col = col*shade + rim;
 
-  // ---- glass edge: a thin, subtle light hairline hugging the border ----
+  // ---- glass edge: thin light hairline hugging the border ----
+  // band width fixed in DEVICE PIXELS (via uCardSize) so the rim reads identically
+  // on mobile and desktop regardless of how large the card is drawn.
   float din  = -d;                                      // distance inward from the border
-  float edge = smoothstep(0.016, 0.002, din);           // crisp thin band right at the rim
-  col += edge * 0.12;                                   // delicate, uniform glass highlight
+  float bw   = 5.0 * 2.0 / uCardSize.y;                 // ~5px -> normalized SDF units
+  float edge = smoothstep(bw, bw*0.18, din);            // crisp thin band right at the rim
+  col += edge * 0.15;                                   // delicate, uniform glass highlight
 
   // opacity falls off toward the sides: 100% at centre -> uSideFade one slot away
   float focusFade = mix(uSideFade, 1.0, smoothstep(0.0,1.0,uFocus));
