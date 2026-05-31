@@ -41,21 +41,18 @@
   #overlay{position:absolute;inset:0;pointer-events:none;z-index:2;}
 
   #caption{
-    position:absolute;left:0;right:0;
-    bottom:19%;
-    min-height:3em;
-    text-align:center;
+    position:absolute;inset:0;
     z-index:3;pointer-events:none;
   }
   #caption .word{
-    position:absolute;top:0;
+    position:absolute;
     font-size:clamp(13px,1.5vw,20px);
     letter-spacing:.14em;font-weight:600;
     white-space:nowrap;
     max-width:80vw;
-    overflow:hidden;text-overflow:ellipsis;
-    transform:translateX(-50%);
-    will-change:left,opacity,transform;
+    text-align:center;
+    transform:translate(-50%,-100%);
+    will-change:left,top,opacity,transform;
   }
   /* wrap to max 2 lines on mobile — no ellipsis */
   @media (max-width:900px){
@@ -72,13 +69,6 @@
       overflow:hidden;
     }
   }
-  #counter{
-    position:absolute;left:0;right:0;
-    bottom:14.5%;text-align:center;
-    font-size:11px;letter-spacing:.32em;color:var(--muted);
-    z-index:3;
-  }
-
   /* ---------- liquid-glass PLAY CTA ---------- */
   #play-cta{
     position:absolute;left:50%;bottom:5.5%;
@@ -90,62 +80,60 @@
     border-radius:999px;
     font-family:inherit;font-weight:700;font-size:21px;letter-spacing:.02em;
     color:#1c1c1f;
-    /* translucent frosted-glass body with a faint vertical gradient */
+    /* single convex glass dome — brightest at centre, gently dimmer toward the rim */
     background:
-      linear-gradient(180deg,
-        rgba(255,255,255,.60) 0%,
-        rgba(255,255,255,.32) 45%,
-        rgba(255,255,255,.50) 100%);
-    -webkit-backdrop-filter:blur(22px) saturate(170%);
-    backdrop-filter:blur(22px) saturate(170%);
+      radial-gradient(135% 165% at 50% 32%,
+        rgba(255,255,255,.86) 0%,
+        rgba(255,255,255,.60) 52%,
+        rgba(255,255,255,.46) 100%);
+    -webkit-backdrop-filter:blur(20px) saturate(155%);
+    backdrop-filter:blur(20px) saturate(155%);
     box-shadow:
       /* faint outer edge so the glass reads against light bg */
-      0 0 0 .5px rgba(90,92,105,.07),
+      0 0 0 .5px rgba(90,92,105,.06),
       /* ambient contact + soft floating drop shadow */
-      0 1px 2px rgba(0,0,0,.05),
-      0 24px 48px -16px rgba(40,40,50,.24),
-      /* bright specular rim: top + bottom + faint side ring */
-      inset 0 1.6px 1px rgba(255,255,255,.95),
-      inset 0 -3px 3px rgba(255,255,255,.72),
-      inset 0 0 0 1px rgba(255,255,255,.30);
+      0 1px 2px rgba(0,0,0,.04),
+      0 22px 46px -16px rgba(40,40,50,.20),
+      /* thin specular rim — top brightest, bottom catches bounce */
+      inset 0 2px 1px rgba(255,255,255,.95),
+      inset 0 -2px 2px rgba(255,255,255,.7),
+      inset 0 0 0 1px rgba(255,255,255,.26),
+      /* soft top-inner shading — very diffuse boundary, adds volume not a dish */
+      inset 0 13px 24px -12px rgba(78,80,92,.20),
+      /* soft inner glow lifting the centre -> convex dome volume */
+      inset 0 -14px 26px -8px rgba(255,255,255,.45);
     transition:transform .28s cubic-bezier(.2,.85,.25,1), box-shadow .28s ease;
     isolation:isolate;
     -webkit-tap-highlight-color:transparent;
   }
-  /* recessed inner dish: concave top shadow + bottom highlight + thin wall ring */
+  /* broad soft sheen on the dome — sits just below the shaded top edge */
   #play-cta::before{
-    content:"";position:absolute;inset:6px;border-radius:999px;
-    background:linear-gradient(180deg,
-      rgba(0,0,0,.06) 0%, rgba(255,255,255,0) 34%, rgba(255,255,255,.22) 100%);
-    box-shadow:
-      inset 0 2.5px 5px rgba(0,0,0,.065),
-      inset 0 -2px 4px rgba(255,255,255,.7),
-      inset 0 0 0 .5px rgba(255,255,255,.55);
-    pointer-events:none;z-index:-1;
-  }
-  /* top glossy sheen */
-  #play-cta::after{
-    content:"";position:absolute;left:7%;right:7%;top:3px;height:42%;
+    content:"";position:absolute;left:8%;right:8%;top:30%;height:46%;
     border-radius:999px;
-    background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0));
-    pointer-events:none;z-index:-1;opacity:.7;
+    background:radial-gradient(120% 120% at 50% 35%,
+      rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 70%);
+    filter:blur(5px);
+    pointer-events:none;z-index:-1;
   }
   #play-cta:hover{
     transform:translateX(-50%) translateY(-2px);
     box-shadow:
-      0 1px 2px rgba(0,0,0,.05),
-      0 32px 58px -16px rgba(40,40,50,.28),
-      inset 0 1.6px 1px rgba(255,255,255,1),
-      inset 0 -3px 3px rgba(255,255,255,.82),
-      inset 0 0 0 1px rgba(255,255,255,.38);
+      0 1px 2px rgba(0,0,0,.04),
+      0 30px 56px -16px rgba(40,40,50,.24),
+      inset 0 2px 1px rgba(255,255,255,1),
+      inset 0 -2px 2px rgba(255,255,255,.8),
+      inset 0 0 0 1px rgba(255,255,255,.32),
+      inset 0 13px 24px -12px rgba(78,80,92,.18),
+      inset 0 -14px 26px -8px rgba(255,255,255,.55);
   }
   #play-cta:active{
-    transform:translateX(-50%) translateY(0) scale(.985);
+    transform:translateX(-50%) translateY(0) scale(.986);
     box-shadow:
-      0 1px 2px rgba(0,0,0,.06),
-      0 10px 22px -12px rgba(40,40,50,.22),
-      inset 0 2px 5px rgba(0,0,0,.07),
-      inset 0 1px 1px rgba(255,255,255,.7);
+      0 1px 2px rgba(0,0,0,.05),
+      0 10px 22px -12px rgba(40,40,50,.18),
+      inset 0 2px 1px rgba(255,255,255,.85),
+      inset 0 0 0 1px rgba(255,255,255,.28),
+      inset 0 6px 14px -6px rgba(120,122,135,.10);
   }
   #play-cta .play-ico{
     width:0;height:0;
@@ -165,7 +153,6 @@
       cursor:default;
     }
     #caption .word{font-size:clamp(13px,4.2vw,18px);}
-    #counter{font-size:10px;bottom:15%;}
     #play-cta{padding:16px 46px;font-size:18px;gap:11px;bottom:5%;}
     #play-cta .play-ico{border-left-width:13px;border-top-width:8px;border-bottom-width:8px;}
   }
@@ -176,7 +163,6 @@
     <canvas id="gl"></canvas>
     <div id="overlay"></div>
     <div id="caption"></div>
-    <div id="counter"></div>
     <button id="play-cta" aria-label="Play"><span class="play-ico"></span><span class="play-label">PLAY</span></button>
   </div>
 
@@ -519,7 +505,6 @@ function snapTo(t){snapTarget=t;}
 --------------------------------------------------------------------------- */
 const overlay=document.getElementById("overlay");
 const captionEl=document.getElementById("caption");
-const counterEl=document.getElementById("counter");
 const wordEls=[];
 for(let i=0;i<N;i++){
   const w=document.createElement("div");w.className="word";w.textContent=SLIDES[i].title;captionEl.appendChild(w);wordEls.push(w);
@@ -590,10 +575,9 @@ function frame(){
     }
   }
 
-  // ---- overlay positioning ----
-  const halfW=W/2;
-  // caption: each title tracks its own card and fades by focus
-  const f=scroll/spacing;                       // fractional slide index
+  // ---- caption: each title tracks its own card, sits just above the image top ----
+  const cardTopPx = cardY - cardH*0.5;          // top edge of the card (CSS px)
+  const titleGap  = Math.max(14, H*0.022);
   for(let i=0;i<N;i++){
     const base=i*spacing-scroll;
     const x=wrap(base);
@@ -601,11 +585,10 @@ function frame(){
     const focus=Math.max(0,1-Math.abs(x)/spacing);
     const w=wordEls[i];
     w.style.left=sx+"px";
+    w.style.top=(cardTopPx - titleGap)+"px";
     w.style.opacity=(focus*focus).toFixed(3);
-    w.style.transform=`translateX(-50%) scale(${0.95+focus*0.05})`;
+    w.style.transform=`translate(-50%,-100%) scale(${0.95+focus*0.05})`;
   }
-  const cur=((Math.round(f)%N)+N)%N;
-  counterEl.textContent=String(cur+1).padStart(2,"0")+" / "+String(N).padStart(2,"0");
 
   requestAnimationFrame(frame);
 }
