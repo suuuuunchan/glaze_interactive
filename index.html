@@ -283,6 +283,7 @@ uniform vec2  uCardSize;
 uniform float uVel;
 uniform float uReflect;
 uniform float uFocus;           // 1 at centre slide -> 0 away
+uniform float uSideFade;        // opacity of side cards (1 = centre)
 out vec4 frag;
 
 float sdRound(vec2 p, vec2 b, float r){
@@ -327,8 +328,8 @@ void main(){
   float edge = smoothstep(0.016, 0.002, din);           // crisp thin band right at the rim
   col += edge * 0.12;                                   // delicate, uniform glass highlight
 
-  // opacity falls off toward the sides: 100% at centre -> 65% one slot away
-  float focusFade = mix(0.65, 1.0, smoothstep(0.0,1.0,uFocus));
+  // opacity falls off toward the sides: 100% at centre -> uSideFade one slot away
+  float focusFade = mix(uSideFade, 1.0, smoothstep(0.0,1.0,uFocus));
 
   float alpha = mask*focusFade;
   if(uReflect>0.5){
@@ -370,7 +371,7 @@ gl.enableVertexAttribArray(aGrid);
 gl.vertexAttribPointer(aGrid,2,gl.FLOAT,false,0,0);
 
 const U={};
-["uRes","uCardX","uCardY","uCardSize","uVel","uReflect","uMargin","uTex","uFocus"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+["uRes","uCardX","uCardY","uCardSize","uVel","uReflect","uMargin","uTex","uFocus","uSideFade"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
 
 // textures — created empty up front, populated when each image finishes loading
 const textures=SLIDES.map(()=>{
@@ -401,6 +402,7 @@ gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
 const MARGIN_FRAC=0.113;         // fraction of width on each edge that warps (2/3 of original 0.17)
 let W=0,H=0,DPR=1;
 let cardW=0,cardH=0,spacing=0,cardY=0;
+let isMobile=false;
 
 function resize(){
   const r=canvas.getBoundingClientRect();
@@ -411,6 +413,7 @@ function resize(){
 
   // portrait 1000:1500 (2:3) cards; only the parts entering the margins distort
   const mobile = W <= 680;
+  isMobile = mobile;
   cardH=Math.min(H*(mobile?0.58:0.68), 1500);
   cardW=cardH*(1000/1500);
   // cap width vs viewport — mobile shows one dominant card with a peek of neighbours
@@ -548,6 +551,7 @@ function frame(){
   gl.uniform1f(U.uMargin,MARGIN_FRAC*W*DPR);
   gl.uniform2f(U.uCardSize,cardW*DPR,cardH*DPR);
   gl.uniform1f(U.uVel,shVel*DPR);
+  gl.uniform1f(U.uSideFade, isMobile ? 0.40 : 0.65);
   gl.uniform1i(U.uTex,0);
   gl.activeTexture(gl.TEXTURE0);
 
