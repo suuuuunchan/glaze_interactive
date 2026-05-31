@@ -250,11 +250,10 @@ void main(){
   float rim   = smoothstep(0.86,1.0, abs(v_bulge)) * w * 0.5;
   col = col*shade + rim;
 
-  // very subtle dim on off-centre slides
-  float dim = mix(0.90,1.0,uFocus);
-  col *= dim;
+  // opacity falls off toward the sides: 100% at centre -> 40% one slot away
+  float focusFade = mix(0.40, 1.0, smoothstep(0.0,1.0,uFocus));
 
-  float alpha = mask;
+  float alpha = mask*focusFade;
   if(uReflect>0.5){
     float fade = smoothstep(1.0,0.05,uv.y);   // bright near card, fade down
     alpha *= fade*0.30;
