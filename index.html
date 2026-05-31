@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>EVENT HORIZON — interactive gallery</title>
+<style>
+  :root{
+    --bg:#e9e8e6;
+    --panel:#fbfaf9;
+    --ink:#16161a;
+    --muted:#9a9690;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;background:var(--bg);}
+  body{
+    font-family:"Helvetica Neue",Arial,"Apple SD Gothic Neo",sans-serif;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* outer rounded stage */
+  #stage{
+    position:relative;
+    width:min(94vw,1500px);
+    height:min(90vh,940px);
+    background:var(--panel);
+    border-radius:26px;
+    box-shadow:0 40px 120px -40px rgba(0,0,0,.28),
+               0 2px 0 rgba(255,255,255,.6) inset;
+    overflow:hidden;
+    cursor:grab;
+    touch-action:none;
+  }
+  #stage.dragging{cursor:grabbing;}
+
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+
+  /* overlay layer for labels / caption */
+  #overlay{position:absolute;inset:0;pointer-events:none;z-index:2;}
+  .daylabel{
+    position:absolute;
+    font-size:12px;letter-spacing:.34em;font-weight:600;
+    color:var(--ink);
+    transform:translateX(-50%);
+    white-space:nowrap;
+    will-change:left,opacity,transform;
+  }
+
+  #caption{
+    position:absolute;left:0;right:0;
+    bottom:12%;
+    text-align:center;
+    z-index:3;pointer-events:none;
+  }
+  #caption .word{
+    position:absolute;top:0;
+    font-size:clamp(20px,3.1vw,40px);
+    letter-spacing:.16em;font-weight:600;
+    white-space:nowrap;
+    transform:translateX(-50%);
+    will-change:left,opacity,transform;
+  }
+  #counter{
+    position:absolute;left:0;right:0;
+    bottom:3.4%;text-align:center;
+    font-size:11px;letter-spacing:.32em;color:var(--muted);
+    z-index:3;
+  }
+
+  #hint{
+    position:absolute;top:22px;left:26px;
+    font-size:11px;letter-spacing:.28em;color:var(--muted);
+    z-index:3;
+  }
+  #brand{
+    position:absolute;top:22px;right:26px;
+    font-size:11px;letter-spacing:.28em;color:var(--muted);
+    z-index:3;
+  }
+
+  /* swipe affordance */
+  #drag-cue{
+    position:absolute;left:50%;bottom:15%;
+    transform:translateX(-50%);
+    display:flex;gap:30px;align-items:center;
+    font-size:10px;letter-spacing:.3em;color:var(--muted);
+    z-index:3;opacity:.85;
+    animation:cuepulse 3.2s ease-in-out infinite;
+  }
+  @keyframes cuepulse{0%,100%{opacity:.35}50%{opacity:.85}}
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="overlay"></div>
+    <div id="hint">DRAG · SCROLL · ◀ ▶</div>
+    <div id="brand">INTERSTELLAR LOG</div>
+    <div id="caption"></div>
+    <div id="counter"></div>
+    <div id="drag-cue"><span>◀</span><span>SWIPE</span><span>▶</span></div>
+  </div>
+
+<script>
+"use strict";
+(function(){
+
+/* ---------------------------------------------------------------------------
+   slide content — procedurally rendered cinematic abstracts
+--------------------------------------------------------------------------- */
+const SLIDES = [
+  { day:"DAY 1", title:"7일 계약 연애 종료일",                     src:"image/7일계약연애종료일_kor.png" },
+  { day:"DAY 2", title:"데뷔 아니면 죽음",                          src:"image/데뷔아니면죽음_kor.png" },
+  { day:"DAY 3", title:"SECOND LIFE",                               src:"image/세컨드라이프_eng.png" },
+  { day:"DAY 4", title:"악마는 샤넬을 입는다",                       src:"image/악마는샤넬을입는다_kor.png" },
+  { day:"DAY 5", title:"THE VILLAINESS DOES NOT WANT TO DIE",       src:"image/악역영애는죽고싶지않다_eng.png" },
+];
+const N = SLIDES.length;
+
+/* ---------------------------------------------------------------------------
+   image loader -> backing canvas (cover fit to portrait 2:3 target)
+--------------------------------------------------------------------------- */
+function loadImage(src){
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    // no crossOrigin — images are same-origin (file:// or localhost)
+    img.onload=()=>res(img);
+    img.onerror=rej;
+    img.src=src;
+  });
+}
+function fitCover(img){
+  const TW=800,TH=1200;                             // 2:3 target matching cards
+  const cv=document.createElement("canvas");cv.width=TW;cv.height=TH;
+  const x=cv.getContext("2d");
+  x.fillStyle="#000";x.fillRect(0,0,TW,TH);
+  const sa=img.width/img.height, ta=TW/TH;
+  let sw,sh,sx,sy;
+  if(sa>ta){sh=img.height; sw=img.height*ta; sx=(img.width-sw)*0.5; sy=0;}
+  else      {sw=img.width;  sh=img.width/ta;  sx=0; sy=(img.height-sh)*0.5;}
+  x.drawImage(img,sx,sy,sw,sh,0,0,TW,TH);
+  return cv;
+}
+
+/* ---------------------------------------------------------------------------
+   WebGL setup
+--------------------------------------------------------------------------- */
+const canvas=document.getElementById("gl");
+const gl=canvas.getContext("webgl2",{antialias:true,premultipliedAlpha:false});
+if(!gl){document.body.innerHTML="<p style='padding:40px'>WebGL2 미지원 브라우저입니다.</p>";return;}
+
+const VERT=`#version 300 es
+precision highp float;
+in vec2 a_grid;                 // 0..1 across card quad
+uniform vec2  uRes;             // canvas px
+uniform float uCardX;           // card centre x (px, wrapped)
+uniform float uCardY;           // card centre y (px)
+uniform vec2  uCardSize;        // w,h (px)
+uniform float uVel;             // smoothed scroll velocity (px)
+uniform float uReflect;         // 0 card / 1 reflection
+uniform float uMargin;          // margin-zone width (px) where space warps
+out vec2 v_uv;
+out float v_edge;
+out float v_fold;               // distortion amount for frag shading
+out float v_bulge;              // -1..1 vertical position, for volume shading
+
+void main(){
+  vec2 g = a_grid;
+
+  float lx = (g.x-0.5)*uCardSize.x;
+  float px = uCardX + lx;                 // flat screen x (no global bend)
+
+  // ---- margin distortion field (only near the left / right edges) ----
+  float mz   = uMargin;
+  float penL = max(0.0,(mz - px)/mz);            // >0 once inside left margin
+  float penR = max(0.0,(px - (uRes.x - mz))/mz); // >0 once inside right margin
+  float pen  = clamp(max(penL,penR), 0.0, 1.5);
+  float dir  = penR > penL ? 1.0 : -1.0;         // +1 right edge, -1 left edge
+  float warp = pen*pen;                          // eases in from the margin line
+
+  v_fold = pen;
+
+  // horizontal stretch toward the edge + velocity-driven lean, gated by margin
+  float strength = mz * (0.55 + min(abs(uVel)*0.012, 0.9));
+  float nx = px + dir*warp*strength*0.5;
+  nx += uVel*warp*1.1*(g.y-0.5);
+
+  // ---- symmetric vertical spread: the edge balloons up & down (3D bulge) ----
+  float vScale = 1.0 + warp*0.55;
+  float vy     = (g.y-0.5)*uCardSize.y*vScale;
+  v_bulge      = (g.y-0.5)*2.0;                  // -1..1 across height, for shading
+
+  float fy = uCardY + vy;
+
+  if(uReflect>0.5){
+    float cardBottom = uCardY + 0.5*uCardSize.y*vScale;
+    float gap = 0.012*uRes.y;
+    float refLY = g.y*uCardSize.y*vScale*0.32;   // shorter reflection for portrait
+    fy = cardBottom + gap + refLY;
+  }
+
+  vec2 clip = vec2(nx/uRes.x*2.0-1.0, 1.0-fy/uRes.y*2.0);
+  gl_Position = vec4(clip,0.0,1.0);
+  v_uv = g;
+  v_edge = dir*pen;
+}`;
+
+const FRAG=`#version 300 es
+precision highp float;
+in vec2 v_uv;
+in float v_edge;
+in float v_fold;
+in float v_bulge;
+uniform sampler2D uTex;
+uniform vec2  uCardSize;
+uniform float uVel;
+uniform float uReflect;
+uniform float uFocus;           // 1 at centre slide -> 0 away
+out vec4 frag;
+
+float sdRound(vec2 p, vec2 b, float r){
+  vec2 q = abs(p)-b+r;
+  return min(max(q.x,q.y),0.0)+length(max(q,0.0))-r;
+}
+
+void main(){
+  vec2 uv = v_uv;
+
+  // gooey lens warp driven by velocity
+  float warp = uVel*0.0011;
+  uv.x += sin(uv.y*3.14159)*warp;
+  uv.y += sin(uv.x*3.14159)*warp*0.4;
+
+  vec2 tuv = uv;
+  if(uReflect>0.5) tuv.y = 0.18 + uv.y*0.7;   // reflection samples lower band, mirrored by geom
+
+  // chromatic split scales with motion
+  float ca = clamp(abs(uVel)*0.0006,0.0,0.004);
+  vec3 col;
+  col.r = texture(uTex, tuv+vec2(ca,0.0)).r;
+  col.g = texture(uTex, tuv).g;
+  col.b = texture(uTex, tuv-vec2(ca,0.0)).b;
+
+  // ---- rounded-rectangle mask ----
+  float aspect = uCardSize.x/uCardSize.y;
+  vec2 p = (uv-0.5)*vec2(aspect,1.0);
+  vec2 b = vec2(0.5*aspect,0.5);
+  float r = min(0.07, min(b.x,b.y)*0.75);   // gentle corner radius
+  float d = sdRound(p,b,r);
+  float aa = 0.006;
+  float mask = smoothstep(aa,-aa,d);
+
+  // ---- 3D volume shading on the warped margin regions ----
+  float w = clamp(v_fold,0.0,1.0);
+  // bright along the vertical centre band, falling off toward top & bottom -> rounded tube
+  float vlit  = 1.0 - v_bulge*v_bulge;                 // 1 at centre -> 0 at edges
+  float shade = mix(1.0, 0.50 + 0.72*vlit, w);
+  // subtle rim highlight right at the top & bottom silhouette for a glossy 3D edge
+  float rim   = smoothstep(0.86,1.0, abs(v_bulge)) * w * 0.5;
+  col = col*shade + rim;
+
+  // very subtle dim on off-centre slides
+  float dim = mix(0.90,1.0,uFocus);
+  col *= dim;
+
+  float alpha = mask;
+  if(uReflect>0.5){
+    float fade = smoothstep(1.0,0.05,uv.y);   // bright near card, fade down
+    alpha *= fade*0.30;
+    col *= 0.82;
+  }
+  if(alpha<=0.002) discard;
+  frag = vec4(col,alpha);
+}`;
+
+function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
+const prog=gl.createProgram();
+gl.attachShader(prog,sh(gl.VERTEX_SHADER,VERT));
+gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FRAG));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+// tessellated grid quad
+const COLS=48,ROWS=24;
+const verts=[];
+for(let j=0;j<=ROWS;j++)for(let i=0;i<=COLS;i++)verts.push(i/COLS,j/ROWS);
+const idx=[];
+for(let j=0;j<ROWS;j++)for(let i=0;i<COLS;i++){
+  const a=j*(COLS+1)+i,b2=a+1,c=a+COLS+1,d2=c+1;
+  idx.push(a,b2,c, b2,d2,c);
+}
+const vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(verts),gl.STATIC_DRAW);
+const ebo=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ebo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+const aGrid=gl.getAttribLocation(prog,"a_grid");
+gl.enableVertexAttribArray(aGrid);
+gl.vertexAttribPointer(aGrid,2,gl.FLOAT,false,0,0);
+
+const U={};
+["uRes","uCardX","uCardY","uCardSize","uVel","uReflect","uMargin","uTex","uFocus"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+
+// textures — created empty up front, populated when each image finishes loading
+const textures=SLIDES.map(()=>{
+  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+  // 1x1 placeholder so sampling is valid before the real image arrives
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([20,20,22,255]));
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  return tex;
+});
+SLIDES.forEach((s,i)=>{
+  loadImage(s.src).then(img=>{
+    const cv=fitCover(img);
+    gl.bindTexture(gl.TEXTURE_2D,textures[i]);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cv);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }).catch(err=>console.warn("image load failed:",s.src,err));
+});
+
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+
+/* ---------------------------------------------------------------------------
+   layout + state
+--------------------------------------------------------------------------- */
+const MARGIN_FRAC=0.17;          // fraction of width on each edge that warps
+let W=0,H=0,DPR=1;
+let cardW=0,cardH=0,spacing=0,cardY=0;
+
+function resize(){
+  const r=canvas.getBoundingClientRect();
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=r.width;H=r.height;
+  canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);
+  gl.viewport(0,0,canvas.width,canvas.height);
+
+  // portrait 1000:1500 (2:3) cards; only the parts entering the margins distort
+  cardH=Math.min(H*0.68, 1500);
+  cardW=cardH*(1000/1500);
+  // cap width so multiple cards fit horizontally on wide screens
+  if(cardW > W*0.46){ cardW = W*0.46; cardH = cardW*1.5; }
+  spacing=cardW*1.20;
+  cardY=H*0.48;
+}
+window.addEventListener("resize",resize);
+
+let scroll=0;          // px
+let target=0;
+let vel=0;             // raw velocity
+let smoothVel=0;       // for shader
+let dragging=false;
+let lastX=0,lastT=0,pVel=0;
+let autoSnap=true;
+let userTouched=false;
+
+function total(){return N*spacing;}
+function wrap(x){
+  // returns position nearest to 0 (centre) for given absolute card pos
+  const t=total();
+  let v=x%t; if(v<-t/2)v+=t; if(v>t/2)v-=t; return v;
+}
+
+/* ---------------------------------------------------------------------------
+   input
+--------------------------------------------------------------------------- */
+const stage=document.getElementById("stage");
+function touched(){userTouched=true;const c=document.getElementById("drag-cue");if(c)c.style.display="none";}
+
+stage.addEventListener("pointerdown",e=>{
+  dragging=true;autoSnap=false;touched();
+  stage.classList.add("dragging");stage.setPointerCapture(e.pointerId);
+  lastX=e.clientX;lastT=performance.now();pVel=0;
+});
+stage.addEventListener("pointermove",e=>{
+  if(!dragging)return;
+  const now=performance.now();
+  const dx=e.clientX-lastX;
+  scroll-=dx;
+  const dt=Math.max(now-lastT,1);
+  pVel=-dx/dt*16;            // px per frame
+  lastX=e.clientX;lastT=now;
+});
+function endDrag(e){
+  if(!dragging)return;
+  dragging=false;stage.classList.remove("dragging");
+  vel=pVel*1.1;              // fling
+  autoSnap=true;
+}
+stage.addEventListener("pointerup",endDrag);
+stage.addEventListener("pointercancel",endDrag);
+stage.addEventListener("pointerleave",endDrag);
+
+stage.addEventListener("wheel",e=>{
+  e.preventDefault();touched();
+  const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+  scroll+=d;vel=d*0.4;autoSnap=true;
+},{passive:false});
+
+window.addEventListener("keydown",e=>{
+  if(e.key==="ArrowLeft"){touched();target=Math.round(scroll/spacing)*spacing-spacing;autoSnap=true;vel=0;snapTo(target);}
+  if(e.key==="ArrowRight"){touched();target=Math.round(scroll/spacing)*spacing+spacing;autoSnap=true;vel=0;snapTo(target);}
+});
+let snapTarget=null;
+function snapTo(t){snapTarget=t;}
+
+/* ---------------------------------------------------------------------------
+   overlay DOM (labels, dividers, caption)
+--------------------------------------------------------------------------- */
+const overlay=document.getElementById("overlay");
+const captionEl=document.getElementById("caption");
+const counterEl=document.getElementById("counter");
+const dayEls=[],wordEls=[];
+for(let i=0;i<N;i++){
+  const d=document.createElement("div");d.className="daylabel";d.textContent=SLIDES[i].day;overlay.appendChild(d);dayEls.push(d);
+  const w=document.createElement("div");w.className="word";w.textContent=SLIDES[i].title;captionEl.appendChild(w);wordEls.push(w);
+}
+function mapX(px){
+  // mirror the shader's horizontal margin stretch so labels/dividers track the cards
+  const mz=MARGIN_FRAC*W;
+  const penL=Math.max(0,(mz-px)/mz);
+  const penR=Math.max(0,(px-(W-mz))/mz);
+  const pen=Math.min(1.5,Math.max(penL,penR));
+  const dir=penR>penL?1:-1;
+  const warp=pen*pen;
+  return px+dir*warp*(mz*0.55)*0.5;
+}
+
+/* ---------------------------------------------------------------------------
+   render loop
+--------------------------------------------------------------------------- */
+function frame(){
+  // physics
+  if(!dragging){
+    scroll+=vel;
+    vel*=0.92;
+    if(autoSnap && Math.abs(vel)<0.6){
+      const tgt = snapTarget!==null?snapTarget:Math.round(scroll/spacing)*spacing;
+      scroll+=(tgt-scroll)*0.12;
+      if(Math.abs(tgt-scroll)<0.4){scroll=tgt;snapTarget=null;}
+    }
+  } else { vel=pVel; }
+
+  // velocity for shader (smoothed, clamped)
+  const inst = dragging?pVel:vel;
+  smoothVel += (inst-smoothVel)*0.2;
+  const shVel = Math.max(-68,Math.min(68,smoothVel));
+
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(prog);
+  gl.uniform2f(U.uRes,canvas.width,canvas.height);
+  gl.uniform1f(U.uMargin,MARGIN_FRAC*W*DPR);
+  gl.uniform2f(U.uCardSize,cardW*DPR,cardH*DPR);
+  gl.uniform1f(U.uVel,shVel*DPR);
+  gl.uniform1i(U.uTex,0);
+  gl.activeTexture(gl.TEXTURE0);
+
+  // draw order: far -> near so nearest (centre) overlaps. Sort by |x|.
+  const items=[];
+  for(let i=0;i<N;i++){
+    const base=i*spacing-scroll;
+    const x=wrap(base);                 // -total/2..total/2
+    if(Math.abs(x)>spacing*2.2)continue;
+    items.push({i,x});
+  }
+  items.sort((p,q)=>Math.abs(q.x)-Math.abs(p.x));
+
+  // reflections first (under everything), then cards
+  for(const pass of [1,0]){
+    for(const it of items){
+      const screenX=(W/2+it.x)*DPR;
+      const focus=Math.max(0,1-Math.abs(it.x)/spacing);
+      gl.bindTexture(gl.TEXTURE_2D,textures[it.i]);
+      gl.uniform1f(U.uReflect,pass);
+      gl.uniform1f(U.uFocus,focus);
+      gl.uniform1f(U.uCardX,screenX);
+      gl.uniform1f(U.uCardY,cardY*DPR);
+      gl.drawElements(gl.TRIANGLES,idx.length,gl.UNSIGNED_SHORT,0);
+    }
+  }
+
+  // ---- overlay positioning ----
+  const halfW=W/2;
+  // caption: each title tracks its own card and fades by focus
+  const f=scroll/spacing;                       // fractional slide index
+  for(let i=0;i<N;i++){
+    const base=i*spacing-scroll;
+    const x=wrap(base);
+    const sx=mapX(W/2+x);
+    const focus=Math.max(0,1-Math.abs(x)/spacing);
+    const w=wordEls[i];
+    w.style.left=sx+"px";
+    w.style.opacity=(focus*focus).toFixed(3);
+    w.style.transform=`translateX(-50%) scale(${0.95+focus*0.05})`;
+  }
+  // day labels + dividers ride along the strip
+  for(let i=0;i<N;i++){
+    const base=i*spacing-scroll;
+    const x=wrap(base);
+    const sx=mapX(W/2+x);
+    const vis=Math.abs(x)<spacing*2.0;
+    const focus=Math.max(0,1-Math.abs(x)/spacing);
+    const el=dayEls[i];
+    el.style.left=sx+"px";
+    el.style.top=(cardY - cardH*0.5 - 34)+"px";
+    el.style.opacity=vis?(0.30+focus*0.7):0;
+  }
+  const cur=((Math.round(f)%N)+N)%N;
+  counterEl.textContent=String(cur+1).padStart(2,"0")+" / "+String(N).padStart(2,"0");
+
+  requestAnimationFrame(frame);
+}
+
+resize();
+gl.clearColor(0,0,0,0);
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
