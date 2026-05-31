@@ -37,9 +37,6 @@
 
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
 
-  /* overlay layer for caption */
-  #overlay{position:absolute;inset:0;pointer-events:none;z-index:2;}
-
   #caption{
     position:absolute;inset:0;
     z-index:3;pointer-events:none;
@@ -161,7 +158,6 @@
 <body>
   <div id="stage">
     <canvas id="gl"></canvas>
-    <div id="overlay"></div>
     <div id="caption"></div>
     <button id="play-cta" aria-label="Play"><span class="play-ico"></span><span class="play-label">PLAY</span></button>
   </div>
@@ -221,11 +217,9 @@ uniform vec2  uRes;             // canvas px
 uniform float uCardX;           // card centre x (px, wrapped)
 uniform float uCardY;           // card centre y (px)
 uniform vec2  uCardSize;        // w,h (px)
-uniform float uVel;             // smoothed scroll velocity (px)
 uniform float uReflect;         // 0 card / 1 reflection
 uniform float uMargin;          // margin-zone width (px) where space warps
 out vec2 v_uv;
-out float v_edge;
 out float v_fold;               // distortion amount for frag shading
 out float v_bulge;              // -1..1 vertical position, for volume shading
 
@@ -269,18 +263,15 @@ void main(){
   vec2 clip = vec2(nx/uRes.x*2.0-1.0, 1.0-fy/uRes.y*2.0);
   gl_Position = vec4(clip,0.0,1.0);
   v_uv = g;
-  v_edge = dir*pen;
 }`;
 
 const FRAG=`#version 300 es
 precision highp float;
 in vec2 v_uv;
-in float v_edge;
 in float v_fold;
 in float v_bulge;
 uniform sampler2D uTex;
 uniform vec2  uCardSize;
-uniform float uVel;
 uniform float uReflect;
 uniform float uFocus;           // 1 at centre slide -> 0 away
 uniform float uSideFade;        // opacity of side cards (1 = centre)
@@ -323,13 +314,11 @@ void main(){
   float rim   = smoothstep(0.86,1.0, abs(v_bulge)) * w * 0.5;
   col = col*shade + rim;
 
-  // ---- glass edge: thin light hairline hugging the border ----
-  // band width fixed in DEVICE PIXELS (via uCardSize) so the rim reads identically
-  // on mobile and desktop regardless of how large the card is drawn.
+  // ---- glass edge: very soft, faint hairline (clean look, like the mobile render) ----
   float din  = -d;                                      // distance inward from the border
-  float bw   = 5.0 * 2.0 / uCardSize.y;                 // ~5px -> normalized SDF units
-  float edge = smoothstep(bw, bw*0.18, din);            // crisp thin band right at the rim
-  col += edge * 0.15;                                   // delicate, uniform glass highlight
+  float bw   = 8.0 * 2.0 / uCardSize.y;                 // ~8px soft band
+  float edge = smoothstep(bw, 0.0, din);                // gentle falloff to the very edge
+  col += edge * 0.06;                                   // faint, soft glass highlight
 
   // opacity falls off toward the sides: 100% at centre -> uSideFade one slot away
   float focusFade = mix(uSideFade, 1.0, smoothstep(0.0,1.0,uFocus));
@@ -374,7 +363,7 @@ gl.enableVertexAttribArray(aGrid);
 gl.vertexAttribPointer(aGrid,2,gl.FLOAT,false,0,0);
 
 const U={};
-["uRes","uCardX","uCardY","uCardSize","uVel","uReflect","uMargin","uTex","uFocus","uSideFade"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+["uRes","uCardX","uCardY","uCardSize","uReflect","uMargin","uTex","uFocus","uSideFade"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
 
 // textures — created empty up front, populated when each image finishes loading
 const textures=SLIDES.map(()=>{
@@ -428,13 +417,10 @@ function resize(){
 window.addEventListener("resize",resize);
 
 let scroll=0;          // px
-let target=0;
 let vel=0;             // raw velocity
-let smoothVel=0;       // for shader
 let dragging=false;
 let lastX=0,lastT=0,pVel=0;
 let autoSnap=true;
-let userTouched=false;
 
 function total(){return N*spacing;}
 function wrap(x){
@@ -447,7 +433,6 @@ function wrap(x){
    input
 --------------------------------------------------------------------------- */
 const stage=document.getElementById("stage");
-function touched(){userTouched=true;const c=document.getElementById("drag-cue");if(c)c.style.display="none";}
 
 // PLAY CTA — don't let presses start a carousel drag
 const playBtn=document.getElementById("play-cta");
@@ -462,7 +447,7 @@ if(playBtn){
 
 let startScroll=0,startSlide=0;
 stage.addEventListener("pointerdown",e=>{
-  dragging=true;autoSnap=false;touched();
+  dragging=true;autoSnap=false;
   stage.classList.add("dragging");try{stage.setPointerCapture(e.pointerId);}catch(_){}
   lastX=e.clientX;lastT=performance.now();pVel=0;
   startScroll=scroll;startSlide=Math.round(scroll/spacing);
@@ -494,22 +479,22 @@ stage.addEventListener("pointercancel",endDrag);
 stage.addEventListener("pointerleave",endDrag);
 
 stage.addEventListener("wheel",e=>{
-  e.preventDefault();touched();
+  e.preventDefault();
   const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
   vel+=d*0.12;autoSnap=true;     // momentum-based, smoothed & clamped in frame
 },{passive:false});
 
 window.addEventListener("keydown",e=>{
-  if(e.key==="ArrowLeft"){touched();target=Math.round(scroll/spacing)*spacing-spacing;autoSnap=true;vel=0;snapTo(target);}
-  if(e.key==="ArrowRight"){touched();target=Math.round(scroll/spacing)*spacing+spacing;autoSnap=true;vel=0;snapTo(target);}
+  const base=Math.round(scroll/spacing)*spacing;
+  if(e.key==="ArrowLeft"){autoSnap=true;vel=0;snapTo(base-spacing);}
+  if(e.key==="ArrowRight"){autoSnap=true;vel=0;snapTo(base+spacing);}
 });
 let snapTarget=null;
 function snapTo(t){snapTarget=t;}
 
 /* ---------------------------------------------------------------------------
-   overlay DOM (labels, dividers, caption)
+   caption DOM — one title per slide, positioned each frame
 --------------------------------------------------------------------------- */
-const overlay=document.getElementById("overlay");
 const captionEl=document.getElementById("caption");
 const wordEls=[];
 for(let i=0;i<N;i++){
@@ -543,17 +528,11 @@ function frame(){
     }
   } else { vel=pVel; }
 
-  // velocity for shader (smoothed, clamped)
-  const inst = dragging?pVel:vel;
-  smoothVel += (inst-smoothVel)*0.2;
-  const shVel = Math.max(-68,Math.min(68,smoothVel));
-
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(prog);
   gl.uniform2f(U.uRes,canvas.width,canvas.height);
   gl.uniform1f(U.uMargin,MARGIN_FRAC*W*DPR);
   gl.uniform2f(U.uCardSize,cardW*DPR,cardH*DPR);
-  gl.uniform1f(U.uVel,shVel*DPR);
   gl.uniform1f(U.uSideFade, isMobile ? 0.40 : 0.65);
   gl.uniform1i(U.uTex,0);
   gl.activeTexture(gl.TEXTURE0);
