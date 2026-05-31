@@ -56,8 +56,8 @@
   }
   #caption .word{
     position:absolute;top:0;
-    font-size:clamp(20px,3.1vw,40px);
-    letter-spacing:.16em;font-weight:600;
+    font-size:clamp(13px,1.5vw,20px);
+    letter-spacing:.14em;font-weight:600;
     white-space:nowrap;
     transform:translateX(-50%);
     will-change:left,opacity,transform;
@@ -182,10 +182,9 @@ void main(){
 
   v_fold = pen;
 
-  // horizontal stretch toward the edge + velocity-driven lean, gated by margin
-  float strength = mz * (0.55 + min(abs(uVel)*0.012, 0.9));
+  // horizontal stretch toward the edge — purely positional (no velocity wobble)
+  float strength = mz * 0.55;
   float nx = px + dir*warp*strength*0.5;
-  nx += uVel*warp*1.1*(g.y-0.5);
 
   // ---- symmetric vertical spread: the edge balloons up & down (3D bulge) ----
   float vScale = 1.0 + warp*0.55;
@@ -228,20 +227,10 @@ float sdRound(vec2 p, vec2 b, float r){
 void main(){
   vec2 uv = v_uv;
 
-  // gooey lens warp driven by velocity
-  float warp = uVel*0.0011;
-  uv.x += sin(uv.y*3.14159)*warp;
-  uv.y += sin(uv.x*3.14159)*warp*0.4;
-
   vec2 tuv = uv;
   if(uReflect>0.5) tuv.y = 0.18 + uv.y*0.7;   // reflection samples lower band, mirrored by geom
 
-  // chromatic split scales with motion
-  float ca = clamp(abs(uVel)*0.0006,0.0,0.004);
-  vec3 col;
-  col.r = texture(uTex, tuv+vec2(ca,0.0)).r;
-  col.g = texture(uTex, tuv).g;
-  col.b = texture(uTex, tuv-vec2(ca,0.0)).b;
+  vec3 col = texture(uTex, tuv).rgb;
 
   // ---- rounded-rectangle mask ----
   float aspect = uCardSize.x/uCardSize.y;
@@ -390,7 +379,7 @@ stage.addEventListener("pointermove",e=>{
 function endDrag(e){
   if(!dragging)return;
   dragging=false;stage.classList.remove("dragging");
-  vel=pVel*1.1;              // fling
+  vel=pVel*0.5;              // gentle fling (further clamped in frame)
   autoSnap=true;
 }
 stage.addEventListener("pointerup",endDrag);
@@ -400,7 +389,7 @@ stage.addEventListener("pointerleave",endDrag);
 stage.addEventListener("wheel",e=>{
   e.preventDefault();touched();
   const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
-  scroll+=d;vel=d*0.4;autoSnap=true;
+  vel+=d*0.12;autoSnap=true;     // momentum-based, smoothed & clamped in frame
 },{passive:false});
 
 window.addEventListener("keydown",e=>{
@@ -438,11 +427,13 @@ function mapX(px){
 function frame(){
   // physics
   if(!dragging){
+    const maxV=spacing*0.16;                 // cap so a fling can't blow past cards
+    vel=Math.max(-maxV,Math.min(maxV,vel));
     scroll+=vel;
-    vel*=0.92;
-    if(autoSnap && Math.abs(vel)<0.6){
+    vel*=0.90;
+    if(autoSnap && Math.abs(vel)<1.0){
       const tgt = snapTarget!==null?snapTarget:Math.round(scroll/spacing)*spacing;
-      scroll+=(tgt-scroll)*0.12;
+      scroll+=(tgt-scroll)*0.14;
       if(Math.abs(tgt-scroll)<0.4){scroll=tgt;snapTarget=null;}
     }
   } else { vel=pVel; }
