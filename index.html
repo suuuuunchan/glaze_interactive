@@ -257,6 +257,11 @@ void main(){
   float rim   = smoothstep(0.86,1.0, abs(v_bulge)) * w * 0.5;
   col = col*shade + rim;
 
+  // ---- glass edge: a thin, subtle light hairline hugging the border ----
+  float din  = -d;                                      // distance inward from the border
+  float edge = smoothstep(0.016, 0.002, din);           // crisp thin band right at the rim
+  col += edge * 0.12;                                   // delicate, uniform glass highlight
+
   // opacity falls off toward the sides: 100% at centre -> 65% one slot away
   float focusFade = mix(0.65, 1.0, smoothstep(0.0,1.0,uFocus));
 
