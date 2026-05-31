@@ -42,7 +42,7 @@
 
   #caption{
     position:absolute;left:0;right:0;
-    bottom:10%;
+    bottom:19%;
     min-height:3em;
     text-align:center;
     z-index:3;pointer-events:none;
@@ -74,21 +74,87 @@
   }
   #counter{
     position:absolute;left:0;right:0;
-    bottom:4%;text-align:center;
+    bottom:14.5%;text-align:center;
     font-size:11px;letter-spacing:.32em;color:var(--muted);
     z-index:3;
   }
 
-  /* swipe affordance */
-  #drag-cue{
-    position:absolute;left:50%;bottom:15%;
+  /* ---------- liquid-glass PLAY CTA ---------- */
+  #play-cta{
+    position:absolute;left:50%;bottom:5.5%;
     transform:translateX(-50%);
-    display:flex;gap:30px;align-items:center;
-    font-size:10px;letter-spacing:.3em;color:var(--muted);
-    z-index:3;opacity:.85;
-    animation:cuepulse 3.2s ease-in-out infinite;
+    z-index:6;
+    display:inline-flex;align-items:center;justify-content:center;gap:14px;
+    padding:19px 58px;
+    border:none;cursor:pointer;outline:none;
+    border-radius:999px;
+    font-family:inherit;font-weight:700;font-size:21px;letter-spacing:.02em;
+    color:#1c1c1f;
+    /* translucent frosted-glass body with a faint vertical gradient */
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.60) 0%,
+        rgba(255,255,255,.32) 45%,
+        rgba(255,255,255,.50) 100%);
+    -webkit-backdrop-filter:blur(22px) saturate(170%);
+    backdrop-filter:blur(22px) saturate(170%);
+    box-shadow:
+      /* faint outer edge so the glass reads against light bg */
+      0 0 0 .5px rgba(90,92,105,.07),
+      /* ambient contact + soft floating drop shadow */
+      0 1px 2px rgba(0,0,0,.05),
+      0 24px 48px -16px rgba(40,40,50,.24),
+      /* bright specular rim: top + bottom + faint side ring */
+      inset 0 1.6px 1px rgba(255,255,255,.95),
+      inset 0 -3px 3px rgba(255,255,255,.72),
+      inset 0 0 0 1px rgba(255,255,255,.30);
+    transition:transform .28s cubic-bezier(.2,.85,.25,1), box-shadow .28s ease;
+    isolation:isolate;
+    -webkit-tap-highlight-color:transparent;
   }
-  @keyframes cuepulse{0%,100%{opacity:.35}50%{opacity:.85}}
+  /* recessed inner dish: concave top shadow + bottom highlight + thin wall ring */
+  #play-cta::before{
+    content:"";position:absolute;inset:6px;border-radius:999px;
+    background:linear-gradient(180deg,
+      rgba(0,0,0,.06) 0%, rgba(255,255,255,0) 34%, rgba(255,255,255,.22) 100%);
+    box-shadow:
+      inset 0 2.5px 5px rgba(0,0,0,.065),
+      inset 0 -2px 4px rgba(255,255,255,.7),
+      inset 0 0 0 .5px rgba(255,255,255,.55);
+    pointer-events:none;z-index:-1;
+  }
+  /* top glossy sheen */
+  #play-cta::after{
+    content:"";position:absolute;left:7%;right:7%;top:3px;height:42%;
+    border-radius:999px;
+    background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0));
+    pointer-events:none;z-index:-1;opacity:.7;
+  }
+  #play-cta:hover{
+    transform:translateX(-50%) translateY(-2px);
+    box-shadow:
+      0 1px 2px rgba(0,0,0,.05),
+      0 32px 58px -16px rgba(40,40,50,.28),
+      inset 0 1.6px 1px rgba(255,255,255,1),
+      inset 0 -3px 3px rgba(255,255,255,.82),
+      inset 0 0 0 1px rgba(255,255,255,.38);
+  }
+  #play-cta:active{
+    transform:translateX(-50%) translateY(0) scale(.985);
+    box-shadow:
+      0 1px 2px rgba(0,0,0,.06),
+      0 10px 22px -12px rgba(40,40,50,.22),
+      inset 0 2px 5px rgba(0,0,0,.07),
+      inset 0 1px 1px rgba(255,255,255,.7);
+  }
+  #play-cta .play-ico{
+    width:0;height:0;
+    border-left:15px solid #1c1c1f;
+    border-top:9.5px solid transparent;
+    border-bottom:9.5px solid transparent;
+    margin-right:-2px;
+    filter:drop-shadow(0 1px 0 rgba(255,255,255,.4));
+  }
 
   /* ---------------- mobile: full-bleed, swipe-first ---------------- */
   @media (max-width:680px){
@@ -99,8 +165,9 @@
       cursor:default;
     }
     #caption .word{font-size:clamp(13px,4.2vw,18px);}
-    #counter{font-size:10px;bottom:5%;}
-    #drag-cue{bottom:11%;font-size:9px;gap:22px;}
+    #counter{font-size:10px;bottom:15%;}
+    #play-cta{padding:16px 46px;font-size:18px;gap:11px;bottom:5%;}
+    #play-cta .play-ico{border-left-width:13px;border-top-width:8px;border-bottom-width:8px;}
   }
 </style>
 </head>
@@ -110,7 +177,7 @@
     <div id="overlay"></div>
     <div id="caption"></div>
     <div id="counter"></div>
-    <div id="drag-cue"><span>◀</span><span>SWIPE</span><span>▶</span></div>
+    <button id="play-cta" aria-label="Play"><span class="play-ico"></span><span class="play-label">PLAY</span></button>
   </div>
 
 <script>
@@ -204,9 +271,12 @@ void main(){
   float fy = uCardY + vy;
 
   if(uReflect>0.5){
-    float cardBottom = uCardY + 0.5*uCardSize.y*vScale;
-    float gap = 0.012*uRes.y;
-    float refLY = g.y*uCardSize.y*vScale*0.32;   // shorter reflection for portrait
+    // reflection sits right below the card at full (non-vScale) aspect ratio
+    float cardBottom = uCardY + 0.5*uCardSize.y;   // use base card height, no vScale
+    float gap = 0.006*uRes.y;
+    // reflection height = 22% of card height, stays same on mobile & desktop
+    float refH = uCardSize.y * 0.22;
+    float refLY = g.y * refH;                      // g.y 0→1 maps to full refH
     fy = cardBottom + gap + refLY;
   }
 
@@ -238,7 +308,13 @@ void main(){
   vec2 uv = v_uv;
 
   vec2 tuv = uv;
-  if(uReflect>0.5) tuv.y = 1.0 - uv.y;   // vertically flip UV for true mirror reflection
+  if(uReflect>0.5){
+    // reflection quad covers 22% of card height starting from the bottom of the card.
+    // uv.y 0→1 maps to cardBottom→cardBottom+refH.
+    // In card-texture space, bottom of card = 1.0, so we sample from 1.0 downward,
+    // flipping uv.y so 0→1 maps to tex 1.0→(1-0.22)=0.78 (mirrored slice of bottom).
+    tuv.y = 1.0 - uv.y * 0.22;
+  }
 
   vec3 col = texture(uTex, tuv).rgb;
 
@@ -270,9 +346,12 @@ void main(){
 
   float alpha = mask*focusFade;
   if(uReflect>0.5){
-    float fade = smoothstep(1.0,0.05,uv.y);   // bright near card, fade down
-    alpha *= fade*0.30;
-    col *= 0.82;
+    // uv.y goes 0 (top of reflection = card bottom) → 1 (bottom of reflection)
+    // fade quickly so it vanishes well before the title text
+    float fade = smoothstep(1.0, 0.0, uv.y);   // linear fade top→bottom
+    fade = fade * fade;                          // square for faster falloff
+    alpha *= fade * 0.28;
+    col *= 0.78;
   }
   if(alpha<=0.002) discard;
   frag = vec4(col,alpha);
@@ -377,6 +456,17 @@ function wrap(x){
 --------------------------------------------------------------------------- */
 const stage=document.getElementById("stage");
 function touched(){userTouched=true;const c=document.getElementById("drag-cue");if(c)c.style.display="none";}
+
+// PLAY CTA — don't let presses start a carousel drag
+const playBtn=document.getElementById("play-cta");
+if(playBtn){
+  ["pointerdown","pointermove","pointerup","wheel","touchstart"].forEach(ev=>
+    playBtn.addEventListener(ev, e=>e.stopPropagation(), {passive:true}));
+  playBtn.addEventListener("click",()=>{
+    const cur=((Math.round(scroll/spacing)%N)+N)%N;
+    console.log("PLAY:", SLIDES[cur].title);
+  });
+}
 
 let startScroll=0,startSlide=0;
 stage.addEventListener("pointerdown",e=>{
