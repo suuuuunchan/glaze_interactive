@@ -42,7 +42,8 @@
 
   #caption{
     position:absolute;left:0;right:0;
-    bottom:12%;
+    bottom:10%;
+    min-height:3em;
     text-align:center;
     z-index:3;pointer-events:none;
   }
@@ -51,24 +52,32 @@
     font-size:clamp(13px,1.5vw,20px);
     letter-spacing:.14em;font-weight:600;
     white-space:nowrap;
+    max-width:80vw;
+    overflow:hidden;text-overflow:ellipsis;
     transform:translateX(-50%);
     will-change:left,opacity,transform;
   }
+  /* wrap to max 2 lines on mobile */
+  @media (max-width:900px){
+    #caption .word{
+      white-space:normal;
+      word-break:keep-all;
+      overflow-wrap:break-word;
+      line-height:1.4;
+      text-align:center;
+      max-width:68vw;
+      letter-spacing:0.04em;
+      font-size:clamp(11px,2.8vw,14px);
+      display:-webkit-box;
+      -webkit-line-clamp:2;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+  }
   #counter{
     position:absolute;left:0;right:0;
-    bottom:3.4%;text-align:center;
+    bottom:4%;text-align:center;
     font-size:11px;letter-spacing:.32em;color:var(--muted);
-    z-index:3;
-  }
-
-  #hint{
-    position:absolute;top:22px;left:26px;
-    font-size:11px;letter-spacing:.28em;color:var(--muted);
-    z-index:3;
-  }
-  #brand{
-    position:absolute;top:22px;right:26px;
-    font-size:11px;letter-spacing:.28em;color:var(--muted);
     z-index:3;
   }
 
@@ -91,8 +100,6 @@
       border-radius:0;box-shadow:none;
       cursor:default;
     }
-    #hint,#brand{font-size:9px;letter-spacing:.22em;top:16px;}
-    #hint{left:16px;} #brand{right:16px;}
     #caption .word{font-size:clamp(13px,4.2vw,18px);}
     #counter{font-size:10px;bottom:5%;}
     #drag-cue{bottom:11%;font-size:9px;gap:22px;}
@@ -103,8 +110,6 @@
   <div id="stage">
     <canvas id="gl"></canvas>
     <div id="overlay"></div>
-    <div id="hint">DRAG · SCROLL · ◀ ▶</div>
-    <div id="brand">INTERSTELLAR LOG</div>
     <div id="caption"></div>
     <div id="counter"></div>
     <div id="drag-cue"><span>◀</span><span>SWIPE</span><span>▶</span></div>
@@ -257,6 +262,11 @@ void main(){
   float rim   = smoothstep(0.86,1.0, abs(v_bulge)) * w * 0.5;
   col = col*shade + rim;
 
+  // ---- glass edge: a thin, subtle light hairline hugging the border ----
+  float din  = -d;                                      // distance inward from the border
+  float edge = smoothstep(0.016, 0.002, din);           // crisp thin band right at the rim
+  col += edge * 0.12;                                   // delicate, uniform glass highlight
+
   // opacity falls off toward the sides: 100% at centre -> 65% one slot away
   float focusFade = mix(0.65, 1.0, smoothstep(0.0,1.0,uFocus));
 
@@ -325,7 +335,7 @@ gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
 /* ---------------------------------------------------------------------------
    layout + state
 --------------------------------------------------------------------------- */
-const MARGIN_FRAC=0.17;          // fraction of width on each edge that warps
+const MARGIN_FRAC=0.113;         // fraction of width on each edge that warps (2/3 of original 0.17)
 let W=0,H=0,DPR=1;
 let cardW=0,cardH=0,spacing=0,cardY=0;
 
@@ -345,8 +355,6 @@ function resize(){
   if(cardW > W*maxWFrac){ cardW = W*maxWFrac; cardH = cardW*1.5; }
   spacing=cardW*(mobile?1.16:1.20);
   cardY=H*(mobile?0.46:0.48);
-  const hint=document.getElementById("hint");
-  if(hint) hint.textContent = mobile ? "SWIPE ◀ ▶" : "DRAG · SCROLL · ◀ ▶";
 }
 window.addEventListener("resize",resize);
 
