@@ -142,6 +142,47 @@
     filter:drop-shadow(0 1px 0 rgba(255,255,255,.4));
   }
 
+  /* ---------- click-to-flip detail card ---------- */
+  #flip{
+    position:absolute;z-index:5;
+    perspective:1600px;
+    visibility:hidden;cursor:pointer;
+    --r:24px;
+  }
+  #flip.show{visibility:visible;}
+  .flip-inner{
+    position:relative;width:100%;height:100%;
+    transform-style:preserve-3d;
+    transition:transform .72s cubic-bezier(.2,.8,.2,1);
+    will-change:transform;
+  }
+  #flip.flipped .flip-inner{transform:rotateY(180deg);}
+  .flip-face{
+    position:absolute;inset:0;border-radius:var(--r);overflow:hidden;
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    box-shadow:0 30px 60px -22px rgba(30,30,40,.42);
+  }
+  .flip-front img{width:100%;height:100%;object-fit:cover;display:block;}
+  .flip-back{
+    transform:rotateY(180deg);
+    background:linear-gradient(180deg,#fbfaf9,#f0eeeb);
+    padding:9% 9% 8%;
+    display:flex;flex-direction:column;text-align:left;
+  }
+  .flip-back .flip-title{
+    font-size:clamp(15px,2vw,22px);font-weight:700;letter-spacing:.01em;
+    line-height:1.3;color:#1c1c1f;
+  }
+  .flip-back .flip-rule{height:1px;background:rgba(0,0,0,.12);margin:.7em 0 .9em;}
+  .flip-back .flip-desc{
+    font-size:clamp(12px,1.35vw,14px);font-weight:500;line-height:1.7;
+    color:#46454c;white-space:pre-line;overflow:auto;flex:1;
+  }
+  .flip-back .flip-hint{
+    margin-top:1em;font-size:10px;letter-spacing:.24em;color:var(--muted);
+    text-transform:uppercase;
+  }
+
   /* ---------------- mobile: full-bleed, swipe-first ---------------- */
   @media (max-width:680px){
     body{background:var(--panel);}
@@ -160,6 +201,15 @@
   <div id="stage">
     <canvas id="gl"></canvas>
     <div id="caption"></div>
+    <div id="flip"><div class="flip-inner">
+      <div class="flip-face flip-front"><img alt=""></div>
+      <div class="flip-face flip-back">
+        <div class="flip-title"></div>
+        <div class="flip-rule"></div>
+        <div class="flip-desc"></div>
+        <div class="flip-hint">tap to flip back</div>
+      </div>
+    </div></div>
     <button id="play-cta" aria-label="Play"><span class="play-ico"></span><span class="play-label">PLAY</span></button>
   </div>
 
@@ -170,12 +220,13 @@
 /* ---------------------------------------------------------------------------
    slide content — procedurally rendered cinematic abstracts
 --------------------------------------------------------------------------- */
+const DUMMY="이곳에는 작품 설명이 들어갑니다. 줄거리와 세계관, 주요 인물에 대한 소개가 담길 예정이며 지금은 임시 더미 텍스트입니다.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. 등장인물의 관계와 갈등, 반전이 어떻게 펼쳐지는지 간략히 소개하는 영역입니다.";
 const SLIDES = [
-  { day:"DAY 1", title:"7일 계약 연애 종료일",                     src:"image/7일계약연애종료일_kor.png" },
-  { day:"DAY 2", title:"데뷔 아니면 죽음",                          src:"image/데뷔아니면죽음_kor.png" },
-  { day:"DAY 3", title:"SECOND LIFE",                               src:"image/세컨드라이프_eng.png" },
-  { day:"DAY 4", title:"악마는 샤넬을 입는다",                       src:"image/악마는샤넬을입는다_kor.png" },
-  { day:"DAY 5", title:"THE VILLAINESS DOES NOT WANT TO DIE",       src:"image/악역영애는죽고싶지않다_eng.png" },
+  { day:"DAY 1", title:"7일 계약 연애 종료일",                     src:"image/7일계약연애종료일_kor.png", desc:"계약으로 시작된 일주일간의 위험한 연애. 정해진 종료일이 다가올수록 두 사람의 진심은 걷잡을 수 없이 흔들린다.\n\n"+DUMMY },
+  { day:"DAY 2", title:"데뷔 아니면 죽음",                          src:"image/데뷔아니면죽음_kor.png", desc:"데뷔가 아니면 죽음뿐인 서바이벌 무대. 무명의 천재가 정상을 향해 모든 것을 건다.\n\n"+DUMMY },
+  { day:"DAY 3", title:"SECOND LIFE",                               src:"image/세컨드라이프_eng.png", desc:"두 번째 삶을 얻은 자의 복수극. 과거의 비극을 되돌리기 위한 처절한 여정이 시작된다.\n\n"+DUMMY },
+  { day:"DAY 4", title:"악마는 샤넬을 입는다",                       src:"image/악마는샤넬을입는다_kor.png", desc:"완벽한 커리어우먼의 가면 뒤에 숨겨진 비밀. 욕망과 야망이 교차하는 도시의 이야기.\n\n"+DUMMY },
+  { day:"DAY 5", title:"THE VILLAINESS DOES NOT WANT TO DIE",       src:"image/악역영애는죽고싶지않다_eng.png", desc:"죽음을 거부한 악역 영애의 생존기. 정해진 파멸의 운명을 비틀기 위한 그녀의 반격이 시작된다.\n\n"+DUMMY },
 ];
 const N = SLIDES.length;
 
@@ -422,6 +473,7 @@ let vel=0;             // raw velocity
 let dragging=false;
 let lastX=0,lastT=0,pVel=0;
 let autoSnap=true;
+let flipOpen=false,flipIndex=0,flipBusy=false;  // flip-to-detail state
 
 function total(){return N*spacing;}
 function wrap(x){
@@ -448,6 +500,7 @@ if(playBtn){
 
 let startScroll=0,startSlide=0;
 stage.addEventListener("pointerdown",e=>{
+  if(flipOpen){ closeFlip(); return; }   // any outside press closes the detail view
   dragging=true;autoSnap=false;
   stage.classList.add("dragging");try{stage.setPointerCapture(e.pointerId);}catch(_){}
   lastX=e.clientX;lastT=performance.now();pVel=0;
@@ -466,8 +519,18 @@ function endDrag(e){
   if(!dragging)return;
   dragging=false;stage.classList.remove("dragging");
   autoSnap=true;vel=0;
-  // swipe = paginate exactly one card; otherwise snap to nearest
   const dragged=scroll-startScroll;
+  // a tap (no real drag) on the centred card -> flip to its detail side
+  if(e&&e.type==="pointerup"&&Math.abs(dragged)<6&&Math.abs(pVel)<3){
+    const rect=stage.getBoundingClientRect();
+    const cx=e.clientX-rect.left, cy=e.clientY-rect.top;
+    if(cx>=W/2-cardW/2&&cx<=W/2+cardW/2&&cy>=cardY-cardH/2&&cy<=cardY+cardH/2){
+      snapTo(Math.round(scroll/spacing)*spacing);
+      openFlip(((Math.round(scroll/spacing)%N)+N)%N);
+      return;
+    }
+  }
+  // swipe = paginate exactly one card; otherwise snap to nearest
   if(Math.abs(pVel)>3 || Math.abs(dragged)>spacing*0.18){
     const dir=Math.sign(pVel!==0?pVel:dragged)||1;
     snapTo((startSlide+dir)*spacing);
@@ -501,6 +564,43 @@ const wordEls=[];
 for(let i=0;i<N;i++){
   const w=document.createElement("div");w.className="word";w.textContent=SLIDES[i].title;captionEl.appendChild(w);wordEls.push(w);
 }
+
+/* ---------------------------------------------------------------------------
+   flip-to-detail card (DOM overlay aligned to the centred WebGL card)
+--------------------------------------------------------------------------- */
+const flipEl=document.getElementById("flip");
+const flipImg=flipEl.querySelector(".flip-front img");
+const flipTitleEl=flipEl.querySelector(".flip-title");
+const flipDescEl=flipEl.querySelector(".flip-desc");
+function openFlip(idx){
+  if(flipOpen||flipBusy)return;
+  flipIndex=idx;
+  flipImg.src=SLIDES[idx].src;
+  flipTitleEl.textContent=SLIDES[idx].title;
+  flipDescEl.textContent=SLIDES[idx].desc;
+  // align overlay to the centred card rect (matches WebGL corner radius 0.07*cardH)
+  flipEl.style.left=(W/2-cardW/2)+"px";
+  flipEl.style.top=(cardY-cardH/2)+"px";
+  flipEl.style.width=cardW+"px";
+  flipEl.style.height=cardH+"px";
+  flipEl.style.setProperty("--r",(0.07*cardH)+"px");
+  flipOpen=true;                                   // hides the WebGL card behind it
+  captionEl.style.visibility="hidden";
+  flipEl.classList.add("show");
+  requestAnimationFrame(()=>requestAnimationFrame(()=>flipEl.classList.add("flipped")));
+}
+function closeFlip(){
+  if(!flipOpen||flipBusy)return;
+  flipBusy=true;
+  flipEl.classList.remove("flipped");              // rotate front-side up again
+  setTimeout(()=>{
+    flipEl.classList.remove("show");
+    captionEl.style.visibility="";
+    flipOpen=false;flipBusy=false;                 // WebGL card reappears
+  },720);
+}
+flipEl.addEventListener("pointerdown",e=>e.stopPropagation());
+flipEl.addEventListener("click",e=>{e.stopPropagation();closeFlip();});
 function mapX(px){
   // mirror the shader's horizontal margin stretch so labels/dividers track the cards
   const mz=MARGIN_FRAC*W;
@@ -551,6 +651,7 @@ function frame(){
   // reflections first (under everything), then cards
   for(const pass of [1,0]){
     for(const it of items){
+      if(flipOpen && it.i===flipIndex) continue;   // hidden behind the DOM flip card
       const screenX=(W/2+it.x)*DPR;
       const focus=Math.max(0,1-Math.abs(it.x)/spacing);
       gl.bindTexture(gl.TEXTURE_2D,textures[it.i]);
