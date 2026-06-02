@@ -648,10 +648,13 @@ function frame(){
   }
   items.sort((p,q)=>Math.abs(q.x)-Math.abs(p.x));
 
+  // while a detail flip is open, hide every card so nothing peeks behind the
+  // rotating DOM card (neighbour edges / slivers would otherwise show mid-flip)
+  if(flipOpen) items.length=0;
+
   // reflections first (under everything), then cards
   for(const pass of [1,0]){
     for(const it of items){
-      if(flipOpen && it.i===flipIndex) continue;   // hidden behind the DOM flip card
       const screenX=(W/2+it.x)*DPR;
       const focus=Math.max(0,1-Math.abs(it.x)/spacing);
       gl.bindTexture(gl.TEXTURE_2D,textures[it.i]);
